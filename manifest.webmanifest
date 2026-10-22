@@ -1,0 +1,29 @@
+{
+  "name": "四级单词小窝",
+  "short_name": "单词小窝",
+  "description": "英语四级背单词：阅读标词、生词本、多场景释义、测验，可离线使用",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F5F5F2",
+  "theme_color": "#F5F5F2",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
