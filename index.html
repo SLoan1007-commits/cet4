@@ -126,7 +126,7 @@ body.has-bg::before{background:transparent}
 .paper{max-width:68ch;margin:0 auto;font-family:var(--f-serif);font-size:var(--rs,19px);line-height:1.8;background:transparent;border-radius:var(--r)}
 body.has-bg .paper{padding:20px 22px;border:1px solid var(--line)}
 .paper p{margin:0 0 1.1em}
-.paper p:first-child::first-letter{font-size:3.1em;float:left;line-height:.9;padding:.08em .08em 0 0;font-weight:500}
+.paper.m-orig p:first-child::first-letter{font-size:3.1em;float:left;line-height:.9;padding:.08em .08em 0 0;font-weight:500}
 .paper .w{cursor:pointer;border-radius:3px;transition:background .12s}
 .paper .w:hover{background:var(--surface2)}
 .paper .w.c4{text-decoration:underline;text-decoration-color:var(--accent);text-decoration-thickness:2px;text-underline-offset:5px}
@@ -134,6 +134,31 @@ body.has-bg .paper{padding:20px 22px;border:1px solid var(--line)}
 .paper .w.sel{box-shadow:0 0 0 2px var(--accent)}
 .hintline{max-width:68ch;margin:0 auto 14px;font-size:13px;color:var(--muted)}
 .rlist{max-width:68ch;margin:0 auto}
+.tbar{border-top:0;margin-top:-18px;padding-top:6px}
+.segc{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:2px;background:var(--surface)}
+.segc button{padding:5px 12px;border-radius:999px;font-size:13px;font-weight:600;color:var(--ink2)}
+.segc button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.reader.wide .rhead,.reader.wide .rtools,.reader.wide .hintline,.reader.wide .paper{max-width:none}
+.zh{font-family:var(--f-sans);font-size:.8em;line-height:1.8;color:var(--ink2);letter-spacing:.01em;transition:filter .2s}
+.pair{margin:0 0 .75em}
+.pair .zh{margin-top:.1em;padding-left:.8em;border-left:2px solid var(--line)}
+.para{margin-bottom:1.5em}
+.prow{display:grid;grid-template-columns:1fr;gap:.45em;margin-bottom:1.3em}
+.prow p{margin:0}
+.prow .zh{background:var(--surface2);border-radius:10px;padding:.7em .9em}
+.fgrid{display:grid;grid-template-columns:1fr;gap:22px}
+.fcol p{margin:0 0 1.05em}
+.fcol.zh{background:var(--surface2);border-radius:12px;padding:16px 18px}
+.fcol .eyebrow{display:block;margin-bottom:10px;font-size:11px}
+@media (min-width:860px){
+  .prow{grid-template-columns:1fr 1fr;gap:32px}.prow .zh{background:transparent;border-radius:0;padding:0 0 0 22px;border-left:1px solid var(--line)}
+  .fgrid{grid-template-columns:1fr 1fr;gap:36px}.fcol.zh{background:transparent;border-radius:0;padding:0 0 0 26px;border-left:1px solid var(--line)}
+}
+.paper.blur .zh:not(.peek){filter:blur(6px);cursor:pointer;user-select:none;-webkit-user-select:none}
+.paper.blur .zh.peek{filter:none}
+.trnote{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-family:var(--f-sans);font-size:14px;background:var(--accent-soft);color:var(--ink);border-radius:12px;padding:12px 14px;margin:0 0 18px}
+.trnote small{color:var(--muted);flex-basis:100%}
+.ocr-tip{font-size:12.5px;color:var(--muted);margin:6px 0 0}
 .endbar{display:flex;gap:10px;flex-wrap:wrap;margin:22px 0}
 
 /* word rows */
@@ -291,7 +316,7 @@ body.has-bg .wli{padding:14px;border:1px solid var(--line);border-radius:var(--r
 </div>
 <canvas id="confetti" hidden></canvas>
 
-<script>window.__OFFLINE=1;</script>
+<script>window.__OFFLINE=1;window.__OCR_BASE="ocr/";</script>
 <script>
 "use strict";
 /* ============ helpers ============ */
@@ -316,7 +341,7 @@ async function loadData(n){if(window["__"+n])return window["__"+n];const r=await
 
 /* ============ state ============ */
 const S={cet:null,dict:null,dictP:null,scn:{},aisc:LS.get("cn_aisc",{}),arts:[],mine:[],words:{},meta:{read:[],known:[],xp:0,days:{}},
-  view:"home",cat:"全部",showBasic:false,fs:LS.get("cn_fs",19),db:null,base:null,sample:null,imgOK:false,cloud:false,assets:null};
+  view:"home",cat:"全部",showBasic:false,tr:{},trm:LS.get("cn_trm","orig"),trBlur:LS.get("cn_trblur",false),curTr:new Map(),fs:LS.get("cn_fs",19),db:null,base:null,sample:null,imgOK:false,cloud:false,assets:null};
 const INTV=[0,1,2,4,7,15,30,60];
 
 /* ============ storage ============ */
@@ -471,36 +496,84 @@ function vHome(m){
 
 /* ============ READER ============ */
 function findArt(id){return allArts().find(a=>String(a.id)===String(id))}
-function splitSent(p){return p.match(/[^.!?。！？]+(?:[.!?。！？]+["'”’)]*\s*|$)/g)||[p]}
+const ABBR=/\b(?:Mr|Mrs|Ms|Dr|St|Prof|etc|vs|e\.g|i\.e|a\.m|p\.m|U\.S|U\.K|No)[.]$/;
+function splitSent(p){const out=[];let last=0,m;const re=/[.!?。！？]+["'”’)]*(\s+|$)/g;
+  while((m=re.exec(p))){const end=m.index+m[0].length;const nxt=p.slice(end);
+    if(m[1]===""||(/^["'“‘(]?[A-Z0-9]/.test(nxt)&&!ABBR.test(p.slice(0,m.index+1)))){out.push(p.slice(last,end));last=end}
+    if(m[0].length===0)re.lastIndex++;if(end>=p.length)break}
+  if(last<p.length)out.push(p.slice(last));return out.length?out:[p]}
+function parasOf(b){return b.split(/\n+/).map(x=>x.trim()).filter(Boolean)}
+function trOf(a){const t=String(a.id).startsWith("m")?(S.mine.find(x=>x.id===a.id)||{}).tr:S.tr[String(a.id)];return Array.isArray(t)?t:null}
+const TRM=[["orig","原文"],["sent","逐句"],["para","逐段"],["full","全文"]];
 function vReader(m){
   const a=findArt(cur.id);if(!a){go("home");return}
   loadDict();
-  const paras=a.b.split(/\n+/).map(s=>s.trim()).filter(Boolean);
-  const html=paras.map(p=>"<p>"+splitSent(p).map(s=>`<span class="s">`+esc(s).replace(/[A-Za-z][A-Za-z'’]*/g,t=>{const x=lem(t);
+  const mode=S.trm||"orig",tr=trOf(a);
+  const P=parasOf(a.b).map((p,pi)=>{const ss=splitSent(p);const t=tr&&tr[pi];return{ss,zh:t&&t.length===ss.length?t:null,zhp:t?t.join(""):""}});
+  S.curTr=new Map();P.forEach(x=>x.zh&&x.ss.forEach((e,i)=>S.curTr.set(e.trim(),x.zh[i])));
+  const mark=s=>`<span class="s">`+esc(s).replace(/[A-Za-z][A-Za-z'’]*/g,t=>{const x=lem(t);
       let cls="w";if(S.words[x.w])cls+=" un";else if(x.c&&!isKnown(x.w)&&(isCore(x.w)||S.showBasic))cls+=" c4";
-      return `<span class="${cls}" data-l="${esc(x.w)}">${t}</span>`})+"</span>").join("")+"</p>").join("");
-  m.innerHTML=`<button class="back" id="bk">← 文章列表</button>
+      return `<span class="${cls}" data-l="${esc(x.w)}">${t}</span>`})+"</span>";
+  const eff=tr?mode:"orig";let html;
+  if(eff==="sent")html=P.map(x=>`<div class="para">${x.ss.map((e,i)=>`<div class="pair">${mark(e)}${x.zh?`<div class="zh">${esc(x.zh[i])}</div>`:""}</div>`).join("")}${!x.zh&&x.zhp?`<div class="zh">${esc(x.zhp)}</div>`:""}</div>`).join("");
+  else if(eff==="para")html=P.map(x=>`<div class="prow"><p class="en">${x.ss.map(mark).join("")}</p><p class="zh">${esc(x.zhp)}</p></div>`).join("");
+  else if(eff==="full")html=`<div class="fgrid"><div class="fcol en">${P.map(x=>`<p>${x.ss.map(mark).join("")}</p>`).join("")}</div><div class="fcol zh"><span class="eyebrow">全文翻译</span>${P.map(x=>`<p>${esc(x.zhp)}</p>`).join("")}</div></div>`;
+  else html=P.map(x=>"<p>"+x.ss.map(mark).join("")+"</p>").join("");
+  const own=String(a.id).startsWith("m");
+  const note=mode!=="orig"&&!tr?`<div class="trnote"><span class="grow">这篇是你自己添加的文章，还没有中文翻译。</span><button class="btn sm pri" id="doTr">翻译这篇文章</button><small>需要联网，翻译一次后会保存下来，之后离线也能看。</small></div>`:"";
+  const hint=eff==="orig"?"点任意单词查看释义和不同场景的用法；不认识的点「加入生词本」，它会被标成黄色。":"英文里的单词照样可以点。打开「遮住中文」后，先自己理解，再点中文核对。";
+  m.innerHTML=`<div class="reader ${eff==="para"||eff==="full"?"wide":""}"><button class="back" id="bk">← 文章列表</button>
   <header class="rhead"><div class="eyebrow">${esc(CATEN[a.c]||"")} · ${esc(a.c)} · ${a.b.split(/\s+/).length} words</div><h1>${esc(a.t)}</h1><p class="muted" style="margin:0">${esc(a.tc||"")}</p></header>
   <div class="rtools"><span class="key"><span class="k4">四级词汇</span><span class="km">我的生词</span></span><span class="grow"></span>
     <button class="toggle" id="basic" aria-pressed="${S.showBasic}" title="同时标出初高中已学过的四级基础词">含基础词</button>
     <button class="toggle" id="fsm" aria-label="缩小字号">A−</button><button class="toggle" id="fsp" aria-label="放大字号">A+</button>
-    ${a.c==="我的"?'<button class="toggle" id="delA">删除</button>':""}</div>
-  <p class="hintline">点任意单词查看释义和不同场景的用法；不认识的点「加入生词本」，它会被标成黄色。</p>
-  <article class="paper" id="paper" style="--rs:${S.fs}px">${html}</article>
-  <div class="rlist" id="wlist"></div>`;
+    ${own?'<button class="toggle" id="delA">删除</button>':""}</div>
+  <div class="rtools tbar"><span class="eyebrow">中文对照</span><span class="segc" role="group" aria-label="翻译显示方式">${TRM.map(([k,l])=>`<button data-trm="${k}" aria-pressed="${mode===k}">${l}</button>`).join("")}</span>
+    ${eff!=="orig"?`<button class="toggle" id="blurT" aria-pressed="${!!S.trBlur}">遮住中文</button>`:""}</div>
+  <p class="hintline">${hint}</p>
+  <article class="paper m-${eff} ${S.trBlur&&eff!=="orig"?"blur":""}" id="paper" style="--rs:${S.fs}px">${note}${html}</article>
+  <div class="rlist" id="wlist"></div></div>`;
   $("#bk").onclick=()=>go("home");
   $("#basic").onclick=()=>{S.showBasic=!S.showBasic;render()};
+  $$("[data-trm]",m).forEach(b=>b.onclick=()=>{S.trm=b.dataset.trm;LS.set("cn_trm",S.trm);const y=scrollY;render();scrollTo(0,y)});
+  const bt=$("#blurT");if(bt)bt.onclick=()=>{S.trBlur=!S.trBlur;LS.set("cn_trblur",S.trBlur);bt.setAttribute("aria-pressed",S.trBlur);$("#paper").classList.toggle("blur",S.trBlur);$$("#paper .zh.peek").forEach(z=>z.classList.remove("peek"))};
+  const dt=$("#doTr");if(dt)dt.onclick=()=>translateArticle(a,dt);
   $("#fsm").onclick=()=>{S.fs=Math.max(15,S.fs-1);LS.set("cn_fs",S.fs);$("#paper").style.setProperty("--rs",S.fs+"px")};
   $("#fsp").onclick=()=>{S.fs=Math.min(26,S.fs+1);LS.set("cn_fs",S.fs);$("#paper").style.setProperty("--rs",S.fs+"px")};
   if($("#delA"))$("#delA").onclick=()=>confirmSheet("删除这篇文章？","生词本里的单词会保留。",()=>{S.mine=S.mine.filter(x=>String(x.id)!==String(a.id));saveLocal();cloudDel("a_"+a.id);go("home")});
-  $("#paper").onclick=async e=>{const w=e.target.closest(".w");if(!w)return;$$(".w.sel").forEach(x=>x.classList.remove("sel"));w.classList.add("sel");
+  $("#paper").onclick=async e=>{const z=e.target.closest(".zh");if(z&&S.trBlur){z.classList.toggle("peek");return}
+    const w=e.target.closest(".w");if(!w)return;$$(".w.sel").forEach(x=>x.classList.remove("sel"));w.classList.add("sel");
     const sent=w.closest(".s").textContent.trim();if(!S.dict&&!S.cet.w[w.dataset.l]){await loadDict();w.dataset.l=lem(w.textContent).w}
-    wordSheet(w.dataset.l,{s:sent,form:w.textContent,aid:String(a.id),at:a.t})};
+    wordSheet(w.dataset.l,{s:sent,zh:S.curTr.get(sent),form:w.textContent,aid:String(a.id),at:a.t})};
   renderArtList(a);
 }
+async function translateArticle(a,btn){
+  const orig=S.mine.find(x=>x.id===a.id);if(!orig)return;
+  const P=parasOf(a.b).map(splitSent);const total=P.reduce((n,x)=>n+x.length,0);
+  btn.disabled=true;btn.textContent="正在翻译…";
+  try{let out;
+    if(S.sample){
+      const prompt=`把下面这篇英文文章翻译成自然、准确的简体中文，供中国大学生备考英语四级时对照阅读。输入是一个 JSON 数组：每个元素代表一个段落，段落里是逐个句子。请逐句翻译，返回结构完全相同的 JSON 数组（段落数、每段句子数都必须一致），只返回 JSON。\n${JSON.stringify(P.map(x=>x.map(y=>y.trim())))}`;
+      out=await S.sample.json(prompt,{modelTier:"default"});
+      if(!Array.isArray(out)||out.length!==P.length||out.some((x,i)=>!Array.isArray(x)||x.length!==P[i].length))throw{code:"shape"};
+      out=out.map(x=>x.map(String));
+    }else{
+      let done=0;out=P.map(x=>x.map(()=>""));const jobs=[];P.forEach((x,pi)=>x.forEach((e,si)=>jobs.push([pi,si,e.trim()])));
+      const run=async()=>{while(jobs.length){const [pi,si,e]=jobs.shift();out[pi][si]=await mmTranslate(e);done++;btn.textContent=`正在翻译… ${done}/${total}`}};
+      await Promise.all([run(),run(),run()]);
+    }
+    orig.tr=out;saveLocal();cloudSet("a_"+orig.id,{k:"a",...orig});toast("翻译完成，已保存");render();
+  }catch(e){console.warn(e);btn.disabled=false;btn.textContent="重新翻译";
+    toast(e&&e.code==="quota"?"今天的免费翻译额度已用完，明天再试":e&&e.code==="not_granted"?"需要允许页面使用 Claude":"翻译失败：请检查网络后重试",2600)}
+}
+async function mmTranslate(text){
+  const chunks=[];let rest=text;while(rest.length>450){let k=rest.lastIndexOf(", ",450);if(k<100)k=rest.lastIndexOf(" ",450);chunks.push(rest.slice(0,k+1));rest=rest.slice(k+1)}chunks.push(rest);
+  const res=[];for(const c of chunks){const r=await fetch("https://api.mymemory.translated.net/get?langpair=en|zh-CN&q="+encodeURIComponent(c));if(!r.ok)throw{code:"net"};
+    const d=await r.json();const tt=String((d.responseData||{}).translatedText||"").trim();if(d.quotaFinished||d.responseStatus==429||/^MYMEMORY WARNING/i.test(tt))throw{code:"quota"};if(d.responseStatus!=200||/LIMIT EXCEEDED|INVALID/i.test(tt))throw{code:"api"};res.push(tt)}
+  return res.join("")}
 function artWords(){const core=new Map(),mine=new Map();
   $$("#paper .w").forEach(el=>{const w=el.dataset.l,s=el.closest(".s").textContent.trim(),f=el.textContent;
-    if(S.words[w]){if(!mine.has(w))mine.set(w,{s,f})}else if(el.classList.contains("c4")&&!core.has(w))core.set(w,{s,f})});return{core,mine}}
+    const zh=S.curTr&&S.curTr.get(s);if(S.words[w]){if(!mine.has(w))mine.set(w,{s,f,zh})}else if(el.classList.contains("c4")&&!core.has(w))core.set(w,{s,f,zh})});return{core,mine}}
 function wordRow(w,o,inBook){const e=entry(w)||{};return `<div class="wli"><button class="say" data-say="${esc(w)}" aria-label="朗读 ${esc(w)}">${IC.say}</button>
     <div class="grow" data-open="${esc(w)}" style="cursor:pointer"><span class="wd">${esc(w)}</span> <span class="ph">${e.p?"/"+esc(e.p)+"/":""}</span>${S.scn[w]?' <span class="pill acc">多场景</span>':""}
     <div class="mn">${esc(shortMean(w,44))}</div>${o&&o.s?`<div class="cx">${hiSent(o.s,o.f||w)}</div>`:""}</div>
@@ -515,15 +588,15 @@ function renderArtList(a){
   <div class="endbar">${core.size?`<button class="btn" id="addAll">四级词全部加入生词本</button>`:""}
     ${all.length>=4?`<button class="btn acc" id="qz">用本文单词做测验</button>`:""}
     <button class="btn pri" id="rd">${S.meta.read.includes(String(a.id))?"已读完":"标记为已读"}</button></div>`;
-  bindRows(box,w=>{const o=core.get(w)||mine.get(w);return{s:o.s,form:o.f,aid:String(a.id),at:a.t}},()=>{refreshMarks();renderArtList(a)});
-  const aa=$("#addAll");if(aa)aa.onclick=()=>{core.forEach((o,w)=>addWord(w,{s:o.s,aid:String(a.id),at:a.t}));toast(`已加入 ${core.size} 个单词`);refreshMarks();renderArtList(a)};
+  bindRows(box,w=>{const o=core.get(w)||mine.get(w);return{s:o.s,zh:o.zh,form:o.f,aid:String(a.id),at:a.t}},()=>{refreshMarks();renderArtList(a)});
+  const aa=$("#addAll");if(aa)aa.onclick=()=>{core.forEach((o,w)=>addWord(w,{s:o.s,zh:o.zh,aid:String(a.id),at:a.t}));toast(`已加入 ${core.size} 个单词`);refreshMarks();renderArtList(a)};
   const qz=$("#qz");if(qz)qz.onclick=()=>{S.quizSrc={k:"art",id:String(a.id),words:all};go("quiz",{src:"art"})};
   $("#rd").onclick=()=>{if(!S.meta.read.includes(String(a.id))){S.meta.read.push(String(a.id));touchDay(10);toast("读完一篇，+10 经验");confetti()}renderArtList(a)};
 }
 function bindRows(box,ctxOf,after){
   $$("[data-say]",box).forEach(b=>b.onclick=()=>speak(b.dataset.say));
   $$("[data-open]",box).forEach(b=>b.onclick=()=>wordSheet(b.dataset.open,ctxOf?ctxOf(b.dataset.open):null));
-  $$("[data-star]",box).forEach(b=>b.onclick=()=>{const w=b.dataset.star;if(S.words[w]){dropWord(w);toast("已移出生词本")}else{const c=ctxOf?ctxOf(w):null;addWord(w,c&&c.s?{s:c.s,aid:c.aid,at:c.at}:null);toast("已加入生词本")}after&&after()});
+  $$("[data-star]",box).forEach(b=>b.onclick=()=>{const w=b.dataset.star;if(S.words[w]){dropWord(w);toast("已移出生词本")}else{const c=ctxOf?ctxOf(w):null;addWord(w,c&&c.s?{s:c.s,zh:c.zh,aid:c.aid,at:c.at}:null);toast("已加入生词本")}after&&after()});
 }
 function refreshMarks(){$$("#paper .w").forEach(el=>{const w=el.dataset.l;el.classList.toggle("un",!!S.words[w]);const x=S.cet.w[w];el.classList.toggle("c4",!S.words[w]&&!!x&&!isKnown(w)&&(!x.b||S.showBasic))})}
 
@@ -545,7 +618,7 @@ async function wordSheet(w,ctx){
   const s=openSheet(`<div class="wh"><h2>${esc(w)}</h2><button class="say" id="sy" aria-label="朗读">${IC.say}</button><span class="ph">${e&&e.p?"/"+esc(e.p)+"/":""}</span>
      ${e&&e.cet?`<span class="pill acc">四级${S.cet.w[w].b?" · 基础":""}</span>`:'<span class="pill">非四级词</span>'}</div>
    ${e?senseHTML(e):'<p class="muted">词典里没找到这个词，可能是人名、地名或拼写变体。</p>'}
-   ${ctx&&ctx.s?`<div class="blk"><span class="eyebrow">在本文中</span><div class="ex">${hiSent(ctx.s,ctx.form||w)}</div>
+   ${ctx&&ctx.s?`<div class="blk"><span class="eyebrow">在本文中</span><div class="ex">${hiSent(ctx.s,ctx.form||w)}${ctx.zh?`<small>${esc(ctx.zh)}</small>`:""}</div>
       ${S.sample?`<button class="btn sm" id="aiB">AI 讲解它在这句里的意思</button><div id="aiO"></div>`:""}</div>`:""}
    ${sc.length?`<div class="blk"><span class="eyebrow">不同场景下的意思 · ${sc.length}</span>${scenesHTML(w,false)}</div>`:""}
    ${e&&e.e?`<div class="blk"><span class="eyebrow">例句</span>${e.e.slice(0,2).map(x=>`<div class="ex">${hiSent(x[0],w)}<small>${esc(x[1])}</small></div>`).join("")}</div>`:""}
@@ -554,7 +627,7 @@ async function wordSheet(w,ctx){
      ${e&&e.cet?`<button class="btn" id="kn">${kn?"取消「认识」":"我认识"}</button>`:""}
      <button class="btn" id="dt">完整词卡 →</button></div>`);
   $("#sy",s).onclick=()=>speak(w);
-  $("#tg",s).onclick=()=>{if(S.words[w]){dropWord(w);toast("已移出")}else{addWord(w,ctx&&ctx.s?{s:ctx.s,aid:ctx.aid,at:ctx.at}:null);toast("已加入生词本")}closeSheet();afterChange()};
+  $("#tg",s).onclick=()=>{if(S.words[w]){dropWord(w);toast("已移出")}else{addWord(w,ctx&&ctx.s?{s:ctx.s,zh:ctx.zh,aid:ctx.aid,at:ctx.at}:null);toast("已加入生词本")}closeSheet();afterChange()};
   const knb=$("#kn",s);if(knb)knb.onclick=()=>{if(kn)S.meta.known=S.meta.known.filter(x=>x!==w);else S.meta.known.push(w);saveMeta();toast(kn?"已恢复标注":"好的，不再标出这个词");closeSheet();afterChange()};
   $("#dt",s).onclick=()=>{closeSheet();go("word",{w,back:S.view,bp:{...cur}})};
   const ai=$("#aiB",s);if(ai)ai.onclick=()=>aiExplain(w,ctx,$("#aiO",s),ai);
@@ -591,7 +664,7 @@ function vWord(m){
     <div class="blk"><span class="eyebrow">不同场景下的意思与例句${sc.length?" · "+sc.length:""}</span>
       ${sc.length?scenesHTML(w,true):`<p class="muted" style="margin:0">这个词的意思比较单一${S.sample?"，也可以让 AI 再找找其他用法":"，看看下面的例句就够了"}。</p>`}
       ${S.sample?`<div style="margin-top:10px"><button class="btn sm" id="aiS">用 AI 补充更多场景</button></div>`:""}</div>
-    ${r&&r.ctx&&r.ctx.length?`<div class="blk"><span class="eyebrow">我遇到它的语境</span>${r.ctx.map(c=>`<div class="ex">${hiSent(c.s,w)}<small>出自《${esc(c.at||"")}》</small>${c.ai?`<div class="ai">${esc(c.ai)}</div>`:""}</div>`).join("")}</div>`:""}
+    ${r&&r.ctx&&r.ctx.length?`<div class="blk"><span class="eyebrow">我遇到它的语境</span>${r.ctx.map(c=>`<div class="ex">${hiSent(c.s,w)}${c.zh?`<small>${esc(c.zh)}</small>`:""}<small>出自《${esc(c.at||"")}》</small>${c.ai?`<div class="ai">${esc(c.ai)}</div>`:""}</div>`).join("")}</div>`:""}
     ${e&&e.e?`<div class="blk"><span class="eyebrow">更多例句</span>${e.e.map(x=>`<div class="ex">${hiSent(x[0],w)}<small>${esc(x[1])}</small></div>`).join("")}</div>`:""}
     ${e&&e.r?`<div class="blk"><span class="eyebrow">四级真题原句</span>${e.r.map(x=>`<div class="ex">“…${hiSent(x[0],w)}…”<small>${esc(x[1])} 四级真题</small></div>`).join("")}</div>`:""}
     ${e&&e.ph?`<div class="blk"><span class="eyebrow">常用搭配</span>${e.ph.map(x=>`<div style="margin:3px 0"><b class="serif" style="font-size:16px">${esc(x[0])}</b> <span class="muted">${esc(x[1])}</span></div>`).join("")}</div>`:""}
@@ -607,40 +680,67 @@ function vWord(m){
 }
 
 /* ============ ADD ARTICLE ============ */
-function ocrAvailable(){return S.imgOK||OFFLINE}
+function ocrBase(){return window.__OCR_BASE?new URL(window.__OCR_BASE,location.href).href:""}
+function ocrMode(){return S.imgOK?"ai":(ocrBase()||OFFLINE)?"local":""}
+async function ocrCached(){try{const b=ocrBase();if(!b||!window.caches)return false;return !!(await caches.match(b+"lang/eng.traineddata.gz"))&&!!(await caches.match(b+"worker.min.js"))}catch(e){return false}}
 function addArticleSheet(){
+  const md=ocrMode();
   const s=openSheet(`<h2 class="serif" style="font-size:26px">添加新文章</h2>
-   <p class="muted" style="margin:4px 0 14px">粘贴英文文段，或上传课本、试卷、杂志的照片，自动识别成文字。</p>
-   <div class="drop"><label class="btn" for="img">选择图片识别</label><input id="img" type="file" accept="image/*" multiple hidden>
-     <p class="muted" style="margin:8px 0 0;font-size:13px" id="ocrS">${S.imgOK?"可一次选多张，按顺序拼成一篇":OFFLINE?"需要联网；第一次使用会下载约 10MB 的识别模型":"当前打开方式无法识别图片，请直接粘贴文字"}</p></div>
+   <p class="muted" style="margin:4px 0 14px">粘贴英文文段，或者给课本、试卷、杂志拍张照片，自动识别成文字。</p>
+   ${md?`<div class="drop"><div class="row" style="justify-content:center">
+       <label class="btn pri" for="cam">拍照识别</label><input id="cam" type="file" accept="image/*" capture="environment" hidden>
+       <label class="btn" for="img">从相册选择</label><input id="img" type="file" accept="image/*" multiple hidden></div>
+     <p class="muted" style="margin:10px 0 0;font-size:13px" id="ocrS">${md==="ai"?"使用 AI 识别，可一次选多张，按顺序拼成一篇":ocrBase()?"正在检查识别引擎…":"第一次识别需要联网下载识别引擎"}</p>
+     <p class="ocr-tip">拍摄时让书页平整、光线充足、文字横平竖直，一次拍一页；可以连续拍多张，文字会依次接在后面。</p></div>`
+     :`<p class="muted" style="font-size:13px">当前打开方式不支持识别图片，请直接粘贴文字。</p>`}
    <div style="display:grid;gap:10px;margin-top:12px">
      <input id="ti" placeholder="标题（可不填）" maxlength="80">
      <textarea id="tx" rows="9" placeholder="在这里粘贴或输入英文…"></textarea></div>
    <div class="acts"><button class="btn" id="cc">取消</button><button class="btn pri" id="ok">开始阅读</button></div>`);
   $("#cc",s).onclick=closeSheet;
-  $("#img",s).onchange=async ev=>{const files=[...ev.target.files];if(!files.length)return;const st=$("#ocrS",s);
-    if(!ocrAvailable()){st.textContent="当前打开方式无法识别图片，请直接粘贴文字";return}
+  const st=$("#ocrS",s);
+  if(md==="local"&&ocrBase())ocrCached().then(ok=>{if(st&&!st.dataset.busy)st.textContent=ok?"识别引擎已存在本机，断网也能用":"第一次识别需要联网下载识别引擎（约 7MB），之后断网也能用"});
+  const handle=async ev=>{const files=[...ev.target.files];ev.target.value="";if(!files.length)return;st.dataset.busy=1;
+    $$(".drop label",s).forEach(l=>l.setAttribute("aria-disabled","true"));
     try{let t="";
-      if(S.imgOK){st.textContent="正在识别 "+files.length+" 张图片…";
-        const blobs=await Promise.all(files.slice(0,S.imgLim.maxCount||4).map(shrink));
+      if(md==="ai"){st.textContent="正在识别 "+files.length+" 张图片…";
+        const blobs=await Promise.all(files.slice(0,S.imgLim.maxCount||4).map(f=>shrink(f)));
         const r=await S.sample("这些图片里是英文文章（可能是课本、试卷或杂志的照片）。请按顺序准确转写图片中的英文正文，保留段落（段落之间空一行），去掉页码、题号、页眉页脚和中文注释。只输出转写后的英文文本，不要任何说明。如果第一行是标题，请在最前面单独一行写 TITLE: 标题。",{images:blobs,modelTier:"default",onText:({text})=>{st.textContent="识别中… "+text.length+" 字"}});
         t=r.text.trim();const mt=t.match(/^TITLE:\s*(.+)\n+/);if(mt){if(!$("#ti",s).value)$("#ti",s).value=mt[1].trim();t=t.slice(mt[0].length)}
-      }else{t=await tessOCR(files,st)}
-      if(!t){st.textContent="没识别出文字，换一张更清晰、更正的照片试试";return}
-      $("#tx",s).value=($("#tx",s).value?$("#tx",s).value+"\n\n":"")+t;st.textContent="识别完成，请检查一下有没有错字再开始阅读";
-    }catch(e){console.warn(e);st.textContent=e&&e.code==="not_granted"?"需要允许页面使用 Claude 才能识别图片":"识别失败：请检查网络后重试，或直接粘贴文字"}};
+      }else{t=await localOCR(files,st)}
+      if(!t){st.textContent="没识别出文字。请换一张更清晰、更正的照片再试";return}
+      const tx=$("#tx",s);tx.value=(tx.value.trim()?tx.value.trim()+"\n\n":"")+t;st.textContent="识别完成。请检查一下有没有错字，可以继续拍下一页";
+    }catch(e){console.warn(e);st.textContent=e&&e.code==="not_granted"?"需要允许页面使用 Claude 才能识别图片":navigator.onLine===false?"识别引擎还没下载到本机：请联网识别一次，之后就能离线使用":"识别失败：请重试，或直接粘贴文字"}
+    finally{delete st.dataset.busy;$$(".drop label",s).forEach(l=>l.removeAttribute("aria-disabled"))}};
+  ["#cam","#img"].forEach(id=>{const el=$(id,s);if(el)el.onchange=handle});
   $("#ok",s).onclick=()=>{const b=$("#tx",s).value.trim();if(b.split(/\s+/).length<5){toast("内容太短，至少写一句英文");return}
     const t=$("#ti",s).value.trim()||b.split(/[.!?\n]/)[0].slice(0,40);
     const a={id:"m"+Date.now(),t,tc:"我的文章 · "+today(),b,at:Date.now()};
     S.mine.unshift(a);saveLocal();cloudSet("a_"+a.id,{k:"a",...a});closeSheet();go("reader",{id:a.id})};
 }
-let tessP=null;
-function loadTess(){if(window.Tesseract)return Promise.resolve();if(!tessP)tessP=new Promise((ok,no)=>{const sc=document.createElement("script");sc.src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";sc.onload=ok;sc.onerror=()=>{tessP=null;no()};document.head.appendChild(sc)});return tessP}
-function cleanOCR(t){return t.replace(/-\n(?=[a-z])/g,"").split(/\n\s*\n/).map(p=>p.replace(/\s*\n\s*/g," ").replace(/[|_~]+/g,"").trim()).filter(p=>/[A-Za-z]{2}/.test(p)).join("\n\n")}
-async function tessOCR(files,st){st.textContent="正在准备识别工具（需联网）…";await loadTess();
-  const wk=await Tesseract.createWorker("eng",1,{logger:m=>{if(m.status==="recognizing text")st.textContent="识别中… "+Math.round(m.progress*100)+"%";else if(/load/.test(m.status))st.textContent="下载识别模型… "+Math.round((m.progress||0)*100)+"%"}});
-  const all=[];for(let i=0;i<files.length;i++){st.textContent=`识别第 ${i+1}/${files.length} 张…`;const r=await wk.recognize(await shrink(files[i],2400));all.push(cleanOCR(r.data.text))}
-  await wk.terminate();return all.join("\n\n").trim()}
+let ocrW=null,ocrWP=null,ocrSt=null;
+function loadScript(src){return new Promise((ok,no)=>{const sc=document.createElement("script");sc.src=src;sc.onload=ok;sc.onerror=no;document.head.appendChild(sc)})}
+const OCR_STEP={"loading tesseract core":"加载识别引擎","initializing tesseract":"启动识别引擎","loading language traineddata":"加载英文模型","initializing api":"准备就绪","recognizing text":"识别中"};
+function getOcr(){if(ocrW)return Promise.resolve(ocrW);if(ocrWP)return ocrWP;
+  ocrWP=(async()=>{const base=ocrBase();
+    if(!window.Tesseract)await loadScript(base?base+"tesseract.min.js":"https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js");
+    const opt={logger:m=>{if(!ocrSt)return;const n=OCR_STEP[m.status];if(n)ocrSt.textContent=n+(m.progress&&m.progress<1?" "+Math.round(m.progress*100)+"%":"…")}};
+    if(base)Object.assign(opt,{workerPath:base+"worker.min.js",corePath:base,langPath:base+"lang",workerBlobURL:false,cacheMethod:"none"});
+    ocrW=await Tesseract.createWorker("eng",1,opt);return ocrW})();
+  ocrWP.catch(()=>{ocrWP=null});return ocrWP}
+function prepImage(file){return new Promise((ok,no)=>{const img=new Image();const u=URL.createObjectURL(file);
+  img.onload=()=>{URL.revokeObjectURL(u);const w=img.naturalWidth,h=img.naturalHeight,L=Math.max(w,h);const k=L>2600?2600/L:L<1400?1400/L:1;
+    const c=document.createElement("canvas");c.width=Math.round(w*k);c.height=Math.round(h*k);const x=c.getContext("2d",{willReadFrequently:true});x.drawImage(img,0,0,c.width,c.height);
+    try{const d=x.getImageData(0,0,c.width,c.height),p=d.data,hist=new Uint32Array(256);
+      for(let i=0;i<p.length;i+=4){const g=(p[i]*299+p[i+1]*587+p[i+2]*114)/1000|0;p[i]=g;hist[g]++}
+      const n=p.length/4;let lo=0,hi=255,acc=0;for(;lo<255;lo++){acc+=hist[lo];if(acc>n*.02)break}acc=0;for(;hi>0;hi--){acc+=hist[hi];if(acc>n*.02)break}
+      const span=Math.max(40,hi-lo);for(let i=0;i<p.length;i+=4){let v=(p[i]-lo)*255/span;v=v<0?0:v>255?255:v;p[i]=p[i+1]=p[i+2]=v}
+      x.putImageData(d,0,0)}catch(e){}
+    ok(c)};img.onerror=()=>{URL.revokeObjectURL(u);no(new Error("bad image"))};img.src=u})}
+function cleanOCR(t){return t.replace(/-\n(?=[a-z])/g,"").split(/\n\s*\n/).map(p=>p.replace(/\s*\n\s*/g," ").replace(/[|_~]+/g,"").replace(/\s{2,}/g," ").trim()).filter(p=>/[A-Za-z]{2}/.test(p)&&(p.match(/[A-Za-z]/g)||[]).length>=p.length*.5).join("\n\n")}
+async function localOCR(files,st){ocrSt=st;st.textContent="正在启动识别引擎…";const w=await getOcr();const all=[];
+  for(let i=0;i<files.length;i++){if(files.length>1)st.textContent=`识别第 ${i+1}/${files.length} 张…`;const cv=await prepImage(files[i]);const r=await w.recognize(cv);all.push(cleanOCR(r.data.text))}
+  ocrSt=null;return all.filter(Boolean).join("\n\n").trim()}
 function shrink(f,max=1800,q=.88){return new Promise(res=>{const img=new Image();const u=URL.createObjectURL(f);img.onload=()=>{const k=Math.min(1,max/Math.max(img.width,img.height));const c=document.createElement("canvas");c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext("2d").drawImage(img,0,0,c.width,c.height);c.toBlob(b=>{URL.revokeObjectURL(u);res(b||f)},"image/jpeg",q)};img.onerror=()=>res(f);img.src=u})}
 
 /* ============ BOOK ============ */
@@ -897,7 +997,7 @@ function vMe(m){
   const th=LS.get("cn_theme",null);if(th)document.documentElement.dataset.theme=th;
   loadLocal();applyLook();
   initCloud();initCaps();
-  try{const [c,a,s]=await Promise.all([loadData("cet4"),loadData("articles"),loadData("scenes").catch(()=>({}))]);S.cet=c;S.arts=a;S.scn=s||{};}
+  try{const [c,a,s,t]=await Promise.all([loadData("cet4"),loadData("articles"),loadData("scenes").catch(()=>({})),loadData("translations").catch(()=>({}))]);S.cet=c;S.arts=a;S.scn=s||{};S.tr=t||{};}
   catch(e){$("#main").innerHTML='<div class="empty"><h3>词库加载失败</h3><p>请检查网络后刷新页面。</p></div>';return}
   render();setTimeout(loadDict,1200);
 })();
